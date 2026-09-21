@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no" />
     <meta name="theme-color" content="#08120e" />
     <meta name="description" content="BITFOOTS: NO TRACE — a dense low-poly first-person forest horror game." />
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%2308120e'/%3E%3Crect x='8' y='4' width='8' height='18' fill='%23f3bb2c'/%3E%3Crect x='16' y='12' width='6' height='16' fill='%23f3bb2c'/%3E%3C/svg%3E" />
@@ -36,7 +36,7 @@
             <button id="start-button" class="primary">ENTER THE FOREST</button>
             <button id="fullscreen-button" class="secondary">FULLSCREEN</button>
           </div>
-          <div class="control-grid" aria-label="Controls">
+          <div class="control-grid desktop-only" aria-label="Desktop controls">
             <span><kbd>WASD</kbd><small>MOVE</small></span>
             <span><kbd>MOUSE</kbd><small>LOOK</small></span>
             <span><kbd>SHIFT</kbd><small>SPRINT</small></span>
@@ -47,7 +47,12 @@
             <span><kbd>Q</kbd><small>DECOY</small></span>
             <span><kbd>R</kbd><small>CAMERA</small></span>
           </div>
-          <p class="meta">DESKTOP · HEADPHONES · 8–12 MINUTES</p>
+          <div class="mobile-control-guide mobile-only" aria-label="Mobile controls">
+            <span><b>LEFT STICK</b><small>MOVE</small></span>
+            <span><b>RIGHT SIDE</b><small>LOOK</small></span>
+            <span><b>ACTION PAD</b><small>RUN · JUMP · USE</small></span>
+          </div>
+          <p class="meta"><span class="desktop-only">DESKTOP · </span><span class="mobile-only">MOBILE · </span>HEADPHONES · 8–12 MINUTES</p>
           <a class="creator-credit title-credit" href="https://x.com/besiktaspokemon" target="_blank" rel="noreferrer">
             COMMUNITY GAME BY @BESIKTASPOKEMON ↗
           </a>
@@ -140,7 +145,7 @@
 
       <div id="tuning-panel" class="hidden">
         <span class="label">FIELD RECEIVER // MANUAL TUNING</span>
-        <strong>USE A / D — HOLD INSIDE THE SIGNAL BAND</strong>
+        <strong id="tuning-instruction">USE A / D — HOLD INSIDE THE SIGNAL BAND</strong>
         <div class="tuning-track">
           <i id="tuning-lock"></i>
           <b id="tuning-needle"></b>
@@ -153,7 +158,7 @@
           <p class="eyebrow">FIELD CAMERA // CONTROLS & SETTINGS</p>
           <h2>STAY ALIVE</h2>
           <div class="settings-layout">
-            <div class="settings-controls">
+            <div class="settings-controls desktop-only">
               <span><kbd>WASD</kbd><b>Move</b></span>
               <span><kbd>MOUSE</kbd><b>Look</b></span>
               <span><kbd>SHIFT</kbd><b>Sprint — loud</b></span>
@@ -165,8 +170,19 @@
               <span><kbd>E</kbd><b>Interact</b></span>
               <span><kbd>M</kbd><b>Mute music</b></span>
             </div>
+            <div class="settings-controls mobile-only mobile-settings-guide">
+              <span><kbd>STICK</kbd><b>Move · steer tuner</b></span>
+              <span><kbd>SWIPE</kbd><b>Look · aim flashlight</b></span>
+              <span><kbd>RUN</kbd><b>Hold to sprint — loud</b></span>
+              <span><kbd>DUCK</kbd><b>Toggle crouch — quiet</b></span>
+              <span><kbd>JUMP</kbd><b>Jump obstacles</b></span>
+              <span><kbd>ACT</kbd><b>Tap or hold to interact</b></span>
+              <span><kbd>LIGHT</kbd><b>Toggle flashlight</b></span>
+              <span><kbd>DECOY</kbd><b>Redirect the pack</b></span>
+              <span><kbd>CAM</kbd><b>Field camera</b></span>
+            </div>
             <div class="settings-options">
-              <label>MOUSE SENSITIVITY <input id="mouse-sensitivity" type="range" min="50" max="180" value="100" /></label>
+              <label>LOOK SENSITIVITY <input id="mouse-sensitivity" type="range" min="50" max="180" value="100" /></label>
               <label>MUSIC VOLUME <input id="music-volume" type="range" min="0" max="100" value="75" /></label>
               <label>SFX VOLUME <input id="sfx-volume" type="range" min="0" max="100" value="80" /></label>
               <label>RENDER QUALITY
@@ -222,11 +238,45 @@
         </div>
       </section>
 
-      <section id="mobile-warning" class="screen">
-        <div class="terminal compact centered">
-          <p class="eyebrow">DESKTOP CAMERA REQUIRED</p>
-          <h2>THE FOREST NEEDS A MOUSE</h2>
-          <p>This build uses first-person mouse look, sprint and jump controls. Open it on a desktop or laptop.</p>
+      <section id="mobile-controls" aria-label="Mobile game controls">
+        <div id="touch-look-zone" aria-label="Swipe here to look">
+          <span>SWIPE TO LOOK</span>
+        </div>
+
+        <button id="mobile-settings" class="mobile-utility" type="button" aria-label="Open controls and settings">
+          <b>Ⅱ</b><small>SET</small>
+        </button>
+
+        <div id="mobile-joystick" class="mobile-joystick" aria-label="Movement joystick">
+          <div class="joystick-ring"><i id="mobile-stick"></i></div>
+          <span>MOVE</span>
+        </div>
+
+        <div class="mobile-equipment" aria-label="Equipment controls">
+          <button id="mobile-flashlight" class="mobile-button equipment-button active" type="button" aria-label="Toggle flashlight" aria-pressed="true">
+            <b>LIGHT</b><small id="mobile-light-status">ON</small>
+          </button>
+          <button id="mobile-decoy" class="mobile-button equipment-button" type="button" aria-label="Throw echo decoy">
+            <b>DECOY</b><small><span id="mobile-decoy-count">3</span> LEFT</small>
+          </button>
+          <button id="mobile-camera" class="mobile-button equipment-button" type="button" aria-label="Use field camera">
+            <b>CAM</b><small>SNAP</small>
+          </button>
+          <button id="mobile-crouch" class="mobile-button equipment-button" type="button" aria-label="Toggle crouch" aria-pressed="false">
+            <b>DUCK</b><small>QUIET</small>
+          </button>
+        </div>
+
+        <div class="mobile-actions" aria-label="Movement action controls">
+          <button id="mobile-sprint" class="mobile-button run-button" type="button" aria-label="Hold to run">
+            <b>RUN</b><small>HOLD</small>
+          </button>
+          <button id="mobile-interact" class="mobile-button action-button" type="button" aria-label="Interact">
+            <b>ACT</b><small id="mobile-action-hint">HOLD</small>
+          </button>
+          <button id="mobile-jump" class="mobile-button jump-button" type="button" aria-label="Jump">
+            <b>JUMP</b><small>VAULT</small>
+          </button>
         </div>
       </section>
 

@@ -1,6 +1,11 @@
 import * as THREE from './vendor/three.module.js';
 
 const $ = (id) => document.getElementById(id);
+const startupParams = new URLSearchParams(location.search);
+const mobileUserAgent = Boolean(navigator.userAgentData?.mobile) || /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+const isTouchDevice = startupParams.has('touch') || matchMedia('(pointer: coarse)').matches || (matchMedia('(hover: none)').matches && mobileUserAgent);
+document.documentElement.classList.toggle('touch-device', isTouchDevice);
+document.documentElement.dataset.inputMode = isTouchDevice ? 'touch' : 'desktop';
 const ui = {
   viewport: $('viewport'), hud: $('hud'), timer: $('timer'), objective: $('objective'),
   objectiveDistance: $('objective-distance'), compassArrow: $('compass-arrow'), traceCount: $('trace-count'),
@@ -14,13 +19,19 @@ const ui = {
   death: $('death-screen'), deathRestart: $('death-restart-button'), deathTraces: $('death-traces'),
   deathTime: $('death-time'), ending: $('ending-screen'), endingRestart: $('ending-restart-button'),
   copy: $('copy-button'), copyStatus: $('copy-status'), finalTime: $('final-time'),
-  mobile: $('mobile-warning'), fear: $('fear-fx'), damage: $('damage-fx'), lightning: $('lightning'),
+  mobileControls: $('mobile-controls'), touchLookZone: $('touch-look-zone'), mobileJoystick: $('mobile-joystick'),
+  mobileStick: $('mobile-stick'), mobileSettings: $('mobile-settings'), mobileFlashlight: $('mobile-flashlight'),
+  mobileLightStatus: $('mobile-light-status'), mobileDecoy: $('mobile-decoy'), mobileDecoyCount: $('mobile-decoy-count'),
+  mobileCamera: $('mobile-camera'), mobileCrouch: $('mobile-crouch'), mobileSprint: $('mobile-sprint'),
+  mobileInteract: $('mobile-interact'), mobileActionHint: $('mobile-action-hint'), mobileJump: $('mobile-jump'),
+  fear: $('fear-fx'), damage: $('damage-fx'), lightning: $('lightning'),
   missionStep: $('mission-step'), noiseFill: $('noise-fill'), decoyCount: $('decoy-count'),
   controlStrip: $('control-strip'), tuningPanel: $('tuning-panel'), tuningNeedle: $('tuning-needle'),
-  tuningStatus: $('tuning-status'), controls: $('controls-screen'), controlsResume: $('controls-resume-button'),
+  tuningStatus: $('tuning-status'), tuningInstruction: $('tuning-instruction'), controls: $('controls-screen'), controlsResume: $('controls-resume-button'),
   mouseSensitivity: $('mouse-sensitivity'), musicVolume: $('music-volume'), sfxVolume: $('sfx-volume'),
   qualitySelect: $('quality-select'), fullscreen: $('fullscreen-button'), fullscreenToggle: $('fullscreen-toggle')
 };
+if (isTouchDevice) ui.tuningInstruction.textContent = 'MOVE THE LEFT STICK — HOLD INSIDE THE SIGNAL BAND';
 
 const WORLD_SIZE = 760;
 const HALF_WORLD = WORLD_SIZE / 2;
@@ -41,6 +52,16 @@ const routeSamples = [];
 const landmarkLights = [];
 const enemies = [];
 const keys = Object.create(null);
+const mobileInput = {
+  moveX: 0,
+  moveY: 0,
+  sprint: false,
+  crouch: false,
+  joystickPointer: null,
+  lookPointer: null,
+  lookX: 0,
+  lookY: 0
+};
 
 let mode = 'title';
 let yaw = -2.35;
@@ -103,9 +124,15 @@ scene.fog = new THREE.FogExp2(0x304941, 0.0086);
 const camera = new THREE.PerspectiveCamera(72, innerWidth / innerHeight, 0.08, 520);
 camera.rotation.order = 'YXZ';
 
+if (isTouchDevice) {
+  qualityMode = 'performance';
+  renderScale = .68;
+  ui.qualitySelect.value = 'performance';
+}
+
 const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
 renderer.setSize(innerWidth, innerHeight);
-renderer.setPixelRatio(Math.min(devicePixelRatio, 1.55));
+renderer.setPixelRatio(Math.min(devicePixelRatio, isTouchDevice ? 1.25 : 1.55) * renderScale);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.18;
@@ -1076,6 +1103,7 @@ function placePlayer(x, z, facingYaw = 0) {
 
 function setupEvents() {
   addEventListener('resize', onResize);
+  addEventListener('orientationchange', () => setTimeout(onResize, 120));
   addEventListener('keydown', (event) => {
     keys[event.code] = true;
     if (event.code === 'KeyE' && !event.repeat) interactPressed = true;
@@ -1095,17 +1123,17 @@ function setupEvents() {
     if (event.code === 'KeyE') taskELatch = false;
   });
   addEventListener('mousemove', (event) => {
-    if (document.pointerLockElement !== renderer.domElement || mode !== 'playing') return;
+    if (isTouchDevice || document.pointerLockElement !== renderer.domElement || mode !== 'playing') return;
     yaw -= event.movementX * .00205 * mouseSensitivity;
     pitch -= event.movementY * .00175 * mouseSensitivity;
     pitch = THREE.MathUtils.clamp(pitch, -1.35, 1.35);
   });
   renderer.domElement.addEventListener('mousedown', (event) => {
-    if (mode !== 'playing') return;
+    if (isTouchDevice || mode !== 'playing') return;
     if (document.pointerLockElement !== renderer.domElement) requestPointerLockSafe();
   });
   document.addEventListener('pointerlockchange', () => {
-    if (mode === 'playing' && document.pointerLockElement !== renderer.domElement) pauseGame();
+    if (!isTouchDevice && mode === 'playing' && document.pointerLockElement !== renderer.domElement) pauseGame();
   });
   ui.start.addEventListener('click', showBriefing);
   ui.begin.addEventListener('click', startGame);
@@ -1127,17 +1155,176 @@ function setupEvents() {
     renderer.setPixelRatio(Math.min(devicePixelRatio, 1.35) * renderScale);
     renderer.setSize(innerWidth, innerHeight, false);
   });
+  if (isTouchDevice) setupMobileControls();
+}
 
-  if (matchMedia('(pointer: coarse)').matches && innerWidth < 900) {
-    ui.mobile.classList.add('active');
-  }
+function setupMobileControls() {
+  const haptic = (duration = 9) => {
+    if (navigator.vibrate) navigator.vibrate(duration);
+  };
+
+  const bindTap = (element, action, hapticDuration = 9) => {
+    element.addEventListener('pointerdown', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (mode !== 'playing') return;
+      haptic(hapticDuration);
+      element.classList.add('pressed');
+      action();
+      setTimeout(() => element.classList.remove('pressed'), 110);
+    });
+  };
+
+  const bindHold = (element, onStart, onEnd) => {
+    let activePointer = null;
+    element.addEventListener('pointerdown', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (mode !== 'playing' || activePointer !== null) return;
+      activePointer = event.pointerId;
+      element.setPointerCapture?.(event.pointerId);
+      element.classList.add('pressed');
+      haptic(8);
+      onStart();
+    });
+    const release = (event) => {
+      if (activePointer === null || (event.pointerId !== undefined && event.pointerId !== activePointer)) return;
+      activePointer = null;
+      element.classList.remove('pressed');
+      onEnd();
+    };
+    element.addEventListener('pointerup', release);
+    element.addEventListener('pointercancel', release);
+    element.addEventListener('lostpointercapture', release);
+  };
+
+  const updateJoystick = (event) => {
+    const ring = ui.mobileJoystick.querySelector('.joystick-ring');
+    const rect = ring.getBoundingClientRect();
+    const radius = Math.max(34, rect.width * .36);
+    let dx = event.clientX - (rect.left + rect.width / 2);
+    let dy = event.clientY - (rect.top + rect.height / 2);
+    const distance = Math.hypot(dx, dy);
+    if (distance > radius) {
+      dx = dx / distance * radius;
+      dy = dy / distance * radius;
+    }
+    let x = dx / radius;
+    let y = -dy / radius;
+    if (Math.abs(x) < .08) x = 0;
+    if (Math.abs(y) < .08) y = 0;
+    mobileInput.moveX = x;
+    mobileInput.moveY = y;
+    ui.mobileStick.style.transform = `translate(calc(-50% + ${dx.toFixed(1)}px), calc(-50% + ${dy.toFixed(1)}px))`;
+  };
+
+  ui.mobileJoystick.addEventListener('pointerdown', (event) => {
+    event.preventDefault();
+    if (mode !== 'playing' || mobileInput.joystickPointer !== null) return;
+    mobileInput.joystickPointer = event.pointerId;
+    ui.mobileJoystick.setPointerCapture?.(event.pointerId);
+    updateJoystick(event);
+  });
+  ui.mobileJoystick.addEventListener('pointermove', (event) => {
+    if (event.pointerId !== mobileInput.joystickPointer) return;
+    event.preventDefault();
+    updateJoystick(event);
+  });
+  const releaseJoystick = (event) => {
+    if (mobileInput.joystickPointer === null || (event.pointerId !== undefined && event.pointerId !== mobileInput.joystickPointer)) return;
+    mobileInput.joystickPointer = null;
+    mobileInput.moveX = 0;
+    mobileInput.moveY = 0;
+    ui.mobileStick.style.transform = 'translate(-50%, -50%)';
+  };
+  ui.mobileJoystick.addEventListener('pointerup', releaseJoystick);
+  ui.mobileJoystick.addEventListener('pointercancel', releaseJoystick);
+  ui.mobileJoystick.addEventListener('lostpointercapture', releaseJoystick);
+
+  ui.touchLookZone.addEventListener('pointerdown', (event) => {
+    event.preventDefault();
+    if (mode !== 'playing' || mobileInput.lookPointer !== null) return;
+    mobileInput.lookPointer = event.pointerId;
+    mobileInput.lookX = event.clientX;
+    mobileInput.lookY = event.clientY;
+    ui.touchLookZone.setPointerCapture?.(event.pointerId);
+  });
+  ui.touchLookZone.addEventListener('pointermove', (event) => {
+    if (mode !== 'playing' || event.pointerId !== mobileInput.lookPointer) return;
+    event.preventDefault();
+    const dx = event.clientX - mobileInput.lookX;
+    const dy = event.clientY - mobileInput.lookY;
+    mobileInput.lookX = event.clientX;
+    mobileInput.lookY = event.clientY;
+    yaw -= dx * .0037 * mouseSensitivity;
+    pitch -= dy * .00325 * mouseSensitivity;
+    pitch = THREE.MathUtils.clamp(pitch, -1.35, 1.35);
+  });
+  const releaseLook = (event) => {
+    if (mobileInput.lookPointer === null || (event.pointerId !== undefined && event.pointerId !== mobileInput.lookPointer)) return;
+    mobileInput.lookPointer = null;
+  };
+  ui.touchLookZone.addEventListener('pointerup', releaseLook);
+  ui.touchLookZone.addEventListener('pointercancel', releaseLook);
+  ui.touchLookZone.addEventListener('lostpointercapture', releaseLook);
+
+  bindHold(ui.mobileSprint,
+    () => { mobileInput.sprint = true; },
+    () => { mobileInput.sprint = false; }
+  );
+  bindHold(ui.mobileInteract,
+    () => { keys.KeyE = true; interactPressed = true; },
+    () => { keys.KeyE = false; taskELatch = false; }
+  );
+  bindTap(ui.mobileJump, () => { jumpPressed = true; });
+  bindTap(ui.mobileFlashlight, toggleFlashlight);
+  bindTap(ui.mobileDecoy, throwDecoy, 14);
+  bindTap(ui.mobileCamera, useFieldCamera, 14);
+  bindTap(ui.mobileCrouch, () => {
+    mobileInput.crouch = !mobileInput.crouch;
+    ui.mobileCrouch.classList.toggle('active', mobileInput.crouch);
+    ui.mobileCrouch.setAttribute('aria-pressed', String(mobileInput.crouch));
+  });
+  ui.mobileSettings.addEventListener('pointerdown', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (mode === 'playing') openControls();
+  });
+}
+
+function resetMobileInputs() {
+  mobileInput.moveX = 0;
+  mobileInput.moveY = 0;
+  mobileInput.sprint = false;
+  mobileInput.crouch = false;
+  mobileInput.joystickPointer = null;
+  mobileInput.lookPointer = null;
+  keys.KeyE = false;
+  taskELatch = false;
+  ui.mobileStick.style.transform = 'translate(-50%, -50%)';
+  ui.mobileSprint.classList.remove('pressed');
+  ui.mobileInteract.classList.remove('pressed');
+  ui.mobileCrouch.classList.remove('active');
+  ui.mobileCrouch.setAttribute('aria-pressed', 'false');
+}
+
+function setMobileControlsVisible(visible) {
+  if (!isTouchDevice) return;
+  ui.mobileControls.classList.toggle('active', visible);
+  if (!visible) resetMobileInputs();
 }
 
 function showBriefing() {
   ensureAudio();
   ui.title.classList.remove('active');
   ui.briefing.classList.add('active');
-  const lines = [
+  const lines = isTouchDevice ? [
+    'Seven encrypted field traces are still transmitting from Black Pine Forest.',
+    'Move with the left stick. Drag the right side of the screen to look and aim.',
+    'Your flashlight slows anything caught in the centre of its beam. It does not stop them.',
+    'Hold RUN to sprint. Toggle DUCK to move quietly. ACT can be tapped or held.',
+    'The SET button keeps controls and settings one touch away.'
+  ] : [
     'Seven encrypted field traces are still transmitting from Black Pine Forest.',
     'Each landmark requires a different field procedure. Read the objective under the receiver.',
     'Your flashlight slows anything caught in the centre of its beam. It does not stop them.',
@@ -1168,16 +1355,20 @@ function startGame() {
   ui.reticle.classList.remove('hidden');
   ui.controlStrip.classList.remove('hidden');
   mode = 'playing';
+  setMobileControlsVisible(true);
   lastFrameTime = performance.now();
   requestPointerLockSafe();
   showChapter('TRACE 01', traceObjectives[0].chapter);
-  showSubtitle('Receiver locked. Find the van and photograph three marked tracks with R.', 6);
+  showSubtitle(isTouchDevice
+    ? 'Receiver locked. Find the van and photograph three marked tracks with CAM.'
+    : 'Receiver locked. Find the van and photograph three marked tracks with R.', 6);
   playSting(108, .7);
 }
 
 function pauseGame() {
   if (mode !== 'playing') return;
   mode = 'paused';
+  setMobileControlsVisible(false);
   ui.pause.classList.add('active');
   if (document.pointerLockElement) document.exitPointerLock();
 }
@@ -1186,6 +1377,7 @@ function resumeGame() {
   if (mode !== 'paused') return;
   ui.pause.classList.remove('active');
   mode = 'playing';
+  setMobileControlsVisible(true);
   lastFrameTime = performance.now();
   requestPointerLockSafe();
 }
@@ -1193,6 +1385,7 @@ function resumeGame() {
 function openControls() {
   if (mode !== 'playing') return;
   mode = 'controls';
+  setMobileControlsVisible(false);
   ui.controls.classList.add('active');
   if (document.pointerLockElement) document.exitPointerLock();
 }
@@ -1201,12 +1394,13 @@ function closeControls() {
   if (mode !== 'controls') return;
   ui.controls.classList.remove('active');
   mode = 'playing';
+  setMobileControlsVisible(true);
   lastFrameTime = performance.now();
   requestPointerLockSafe();
 }
 
 function requestPointerLockSafe() {
-  if (document.pointerLockElement === renderer.domElement || !renderer.domElement.requestPointerLock) return;
+  if (isTouchDevice || document.pointerLockElement === renderer.domElement || !renderer.domElement.requestPointerLock) return;
   try {
     const attempt = renderer.domElement.requestPointerLock();
     if (attempt && typeof attempt.catch === 'function') attempt.catch(() => {});
@@ -1255,12 +1449,20 @@ function applyFlashlightState(withFeedback = true) {
   ui.flashlightLabel.textContent = flashlightOn ? 'ON' : 'OFF';
   ui.flashlightState.classList.toggle('on', flashlightOn);
   ui.flashlightState.classList.toggle('off', !flashlightOn);
+  ui.mobileLightStatus.textContent = flashlightOn ? 'ON' : 'OFF';
+  ui.mobileFlashlight.classList.toggle('active', flashlightOn);
+  ui.mobileFlashlight.setAttribute('aria-pressed', String(flashlightOn));
   if (withFeedback) {
     ui.toggleToast.textContent = flashlightOn ? 'FLASHLIGHT ON' : 'FLASHLIGHT OFF';
     ui.toggleToast.classList.add('show');
     toastTimer = 1.2;
     playClick(flashlightOn);
   }
+}
+
+function syncMobileEquipment() {
+  ui.mobileDecoyCount.textContent = decoyCount;
+  ui.mobileDecoy.classList.toggle('unavailable', decoyCount <= 0);
 }
 
 function updatePlayer(dt) {
@@ -1272,13 +1474,18 @@ function updatePlayer(dt) {
     if (keys.KeyS || keys.ArrowDown) move.sub(forward);
     if (keys.KeyD || keys.ArrowRight) move.add(right);
     if (keys.KeyA || keys.ArrowLeft) move.sub(right);
+    if (isTouchDevice) {
+      move.addScaledVector(forward, mobileInput.moveY);
+      move.addScaledVector(right, mobileInput.moveX);
+    }
   }
-  const moving = move.lengthSq() > .01;
-  crouching = (keys.KeyC || keys.ControlLeft) && grounded && !tuningActive;
-  const sprinting = moving && !crouching && (keys.ShiftLeft || keys.ShiftRight) && stamina > 1;
+  const moveStrength = Math.min(1, move.length());
+  const moving = moveStrength > .08;
+  crouching = (keys.KeyC || keys.ControlLeft || mobileInput.crouch) && grounded && !tuningActive;
+  const sprinting = moving && !crouching && (keys.ShiftLeft || keys.ShiftRight || mobileInput.sprint) && stamina > 1;
   const speed = crouching ? 2.25 : sprinting ? SPRINT_SPEED : WALK_SPEED;
   if (moving) {
-    move.normalize().multiplyScalar(speed * dt * (grounded ? 1 : .64));
+    move.normalize().multiplyScalar(speed * moveStrength * dt * (grounded ? 1 : .64));
     movePlayerWithCollision(move.x, move.z);
     bobTime += dt * (sprinting ? 13.5 : 8.2);
   } else {
@@ -1407,7 +1614,7 @@ function updateInteraction(dt) {
     updateFieldTask(dt);
   } else if (traceCount < 7 && distance < 4.5) {
     ui.interaction.classList.remove('hidden');
-    ui.interactionLabel.textContent = 'HOLD E — RECOVER SHIELDED TRACE';
+    setInteractionCopy('HOLD E — RECOVER SHIELDED TRACE', 'HOLD ACT — RECOVER SHIELDED TRACE', 'HOLD');
     if (keys.KeyE) interactionProgress += dt / 1.05;
     else interactionProgress = Math.max(0, interactionProgress - dt * 2.4);
     ui.interactionFill.style.width = `${Math.min(1, interactionProgress) * 100}%`;
@@ -1420,6 +1627,11 @@ function updateInteraction(dt) {
   if (traceCount === 7 && distance < 8.5) completeGame();
 }
 
+function setInteractionCopy(desktopCopy, mobileCopy, mobileHint = 'HOLD') {
+  ui.interactionLabel.textContent = isTouchDevice ? mobileCopy : desktopCopy;
+  if (isTouchDevice) ui.mobileActionHint.textContent = mobileHint;
+}
+
 function updateMissionStep() {
   if (traceCount >= 7) {
     ui.missionStep.textContent = 'ALL TRACES SECURED — REACH THE FLOODLIT GATE';
@@ -1427,11 +1639,19 @@ function updateMissionStep() {
   }
   const task = tasks[traceCount];
   if (task.complete) {
-    ui.missionStep.textContent = 'TRACE EXPOSED — HOLD E TO RECOVER';
+    ui.missionStep.textContent = isTouchDevice ? 'TRACE EXPOSED — HOLD ACT TO RECOVER' : 'TRACE EXPOSED — HOLD E TO RECOVER';
     setBeaconTarget(traceObjectives[traceCount]);
     return;
   }
-  const messages = [
+  const messages = isTouchDevice ? [
+    `CAM: PHOTOGRAPH THE MARKED TRACKS — ${task.step}/3`,
+    ['FIND THE RED FUEL CAN', 'CARRY FUEL TO THE GENERATOR', 'PULL THE CABIN STARTER'][task.step],
+    tuningActive ? 'LEFT STICK: HOLD INSIDE THE SIGNAL BAND' : 'FIND THE TOWER RECEIVER AND TAP ACT',
+    `AIM THE LIGHT AT THE ACTIVE RUNE — ${task.step}/3`,
+    `BREAKER ORDER: II → III → I — ${task.step}/3`,
+    'HOLD RUN + TAP JUMP AT THE BROKEN SPAN',
+    task.active ? `STAY INSIDE THE SEAL — ${Math.max(0, 12 - task.progress * 12).toFixed(1)} SEC` : 'ACTIVATE THE SHRINE SEAL WITH ACT'
+  ] : [
     `R: PHOTOGRAPH THE MARKED TRACKS — ${task.step}/3`,
     ['FIND THE RED FUEL CAN', 'CARRY FUEL TO THE GENERATOR', 'PULL THE CABIN STARTER'][task.step],
     tuningActive ? 'A / D: HOLD THE NEEDLE INSIDE THE SIGNAL BAND' : 'FIND THE TOWER RECEIVER AND PRESS E',
@@ -1480,7 +1700,7 @@ function updateFieldTask(dt) {
       .sort((a, b) => a.distance - b.distance)[0];
     if (nearest && nearest.distance < 8.5) {
       ui.interaction.classList.remove('hidden');
-      ui.interactionLabel.textContent = `PRESS R OR E — PHOTOGRAPH ${nearest.node.userData.label}`;
+      setInteractionCopy(`PRESS R OR E — PHOTOGRAPH ${nearest.node.userData.label}`, `TAP CAM OR ACT — PHOTOGRAPH ${nearest.node.userData.label}`, 'TAP');
       ui.interactionFill.style.width = '100%';
       if ((keys.KeyE || interactPressed) && !taskELatch) {
         taskELatch = true;
@@ -1498,7 +1718,7 @@ function updateFieldTask(dt) {
     const distance = horizontalDistanceTo(node.position);
     if (distance < 3.2) {
       ui.interaction.classList.remove('hidden');
-      ui.interactionLabel.textContent = `HOLD E — ${node.userData.label}`;
+      setInteractionCopy(`HOLD E — ${node.userData.label}`, `HOLD ACT — ${node.userData.label}`, 'HOLD');
       if (keys.KeyE) interactionProgress += dt / (task.step === 2 ? .55 : 1.05);
       else interactionProgress = Math.max(0, interactionProgress - dt * 2.4);
       ui.interactionFill.style.width = `${Math.min(1, interactionProgress) * 100}%`;
@@ -1520,7 +1740,7 @@ function updateFieldTask(dt) {
     if (!tuningActive) {
       if (distance < 3.4) {
         ui.interaction.classList.remove('hidden');
-        ui.interactionLabel.textContent = 'PRESS E — OPEN RECEIVER TUNER';
+        setInteractionCopy('PRESS E — OPEN RECEIVER TUNER', 'TAP ACT — OPEN RECEIVER TUNER', 'TAP');
         ui.interactionFill.style.width = '0%';
         if ((keys.KeyE || interactPressed) && !taskELatch) {
           taskELatch = true;
@@ -1533,8 +1753,8 @@ function updateFieldTask(dt) {
       return;
     }
     hideInteraction();
-    if (keys.KeyA || keys.ArrowLeft) task.value -= dt * .3;
-    if (keys.KeyD || keys.ArrowRight) task.value += dt * .3;
+    if (keys.KeyA || keys.ArrowLeft || (isTouchDevice && mobileInput.moveX < -.16)) task.value -= dt * .3 * (isTouchDevice ? Math.max(.5, Math.abs(mobileInput.moveX)) : 1);
+    if (keys.KeyD || keys.ArrowRight || (isTouchDevice && mobileInput.moveX > .16)) task.value += dt * .3 * (isTouchDevice ? Math.max(.5, Math.abs(mobileInput.moveX)) : 1);
     task.value = THREE.MathUtils.clamp(task.value + Math.sin(elapsed * 3.7) * dt * .008, 0, 1);
     const locked = task.value > .63 && task.value < .76;
     task.progress = THREE.MathUtils.clamp(task.progress + dt * (locked ? .72 : -1.5), 0, 1);
@@ -1580,7 +1800,7 @@ function updateFieldTask(dt) {
     const nearby = taskObjects[4].find((node) => !node.userData.done && horizontalDistanceTo(node.position) < 3.2);
     if (nearby) {
       ui.interaction.classList.remove('hidden');
-      ui.interactionLabel.textContent = `PRESS E — ${nearby.userData.label}`;
+      setInteractionCopy(`PRESS E — ${nearby.userData.label}`, `TAP ACT — ${nearby.userData.label}`, 'TAP');
       ui.interactionFill.style.width = '0%';
       if ((keys.KeyE || interactPressed) && !taskELatch) {
         taskELatch = true;
@@ -1624,7 +1844,7 @@ function updateFieldTask(dt) {
     const distance = horizontalDistanceTo(node.position);
     if (!task.active && distance < 3.6) {
       ui.interaction.classList.remove('hidden');
-      ui.interactionLabel.textContent = 'PRESS E — ACTIVATE WITNESS SEAL';
+      setInteractionCopy('PRESS E — ACTIVATE WITNESS SEAL', 'TAP ACT — ACTIVATE WITNESS SEAL', 'TAP');
       ui.interactionFill.style.width = '0%';
       if ((keys.KeyE || interactPressed) && !taskELatch) {
         taskELatch = true;
@@ -1734,6 +1954,7 @@ function collectTrace() {
   battery = Math.min(100, battery + (traceCount % 2 === 0 ? 42 : 22));
   if (traceCount % 2 === 0) decoyCount = Math.min(3, decoyCount + 1);
   ui.decoyCount.textContent = decoyCount;
+  syncMobileEquipment();
   ui.traceCount.textContent = traceCount;
   shake = .85;
   playTraceSound();
@@ -1781,6 +2002,7 @@ function throwDecoy() {
   activeDecoy = { x, z, group, ring, time: 8, beep: 0 };
   decoyCount--;
   ui.decoyCount.textContent = decoyCount;
+  syncMobileEquipment();
   noiseLevel = Math.max(noiseLevel, 72);
   forceHuntersToInvestigate(x, z, 8);
   showSubtitle('ECHO DECOY ACTIVE — move quietly while they investigate.', 3.5);
@@ -1987,6 +2209,7 @@ function showDistantSighting() {
 function killPlayer() {
   if (mode !== 'playing') return;
   mode = 'dead';
+  setMobileControlsVisible(false);
   ui.hud.classList.add('hidden');
   ui.reticle.classList.add('hidden');
   ui.deathTraces.textContent = `${traceCount} / 7`;
@@ -2000,6 +2223,7 @@ function killPlayer() {
 function completeGame() {
   if (mode !== 'playing') return;
   mode = 'ending';
+  setMobileControlsVisible(false);
   ui.hud.classList.add('hidden');
   ui.reticle.classList.add('hidden');
   ui.finalTime.textContent = formatTime(elapsed);
@@ -2289,6 +2513,7 @@ if (debugEnabled) {
       ui.reticle.classList.remove('hidden');
       ui.controlStrip.classList.remove('hidden');
       mode = 'playing';
+      setMobileControlsVisible(true);
       ensureAudio();
       updateTaskVisibility();
       return this.state();
@@ -2330,7 +2555,7 @@ if (debugEnabled) {
       return this.state();
     },
     state() {
-      return { mode, traceCount, flashlightOn, battery: Math.round(battery), stamina: Math.round(stamina), noise: Math.round(noiseLevel), decoys: decoyCount, audio: audio ? audio.ctx.state : 'off', musicMuted, task: traceCount < 7 ? { type: tasks[traceCount].type, step: tasks[traceCount].step, complete: tasks[traceCount].complete } : null, objective: ui.objective.textContent, trees: treePositions.length, colliders: colliders.length, renderScale: Number(renderScale.toFixed(2)), player: { x: Math.round(camera.position.x), z: Math.round(camera.position.z) } };
+      return { mode, inputMode: isTouchDevice ? 'touch' : 'desktop', touchControls: ui.mobileControls.classList.contains('active'), mobileInput: { moveX: Number(mobileInput.moveX.toFixed(2)), moveY: Number(mobileInput.moveY.toFixed(2)), sprint: mobileInput.sprint, crouch: mobileInput.crouch }, traceCount, flashlightOn, battery: Math.round(battery), stamina: Math.round(stamina), noise: Math.round(noiseLevel), decoys: decoyCount, audio: audio ? audio.ctx.state : 'off', musicMuted, task: traceCount < 7 ? { type: tasks[traceCount].type, step: tasks[traceCount].step, complete: tasks[traceCount].complete } : null, objective: ui.objective.textContent, trees: treePositions.length, colliders: colliders.length, renderScale: Number(renderScale.toFixed(2)), player: { x: Math.round(camera.position.x), z: Math.round(camera.position.z) } };
     }
   };
   const debugParams = new URLSearchParams(location.search);
