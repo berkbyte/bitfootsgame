@@ -2347,5 +2347,11 @@ if (debugEnabled) {
     ui.chapterCard.classList.remove('show');
     chapterTimer = 0;
     if (debugParams.has('summon')) api.summon(Number(debugParams.get('summonIndex') || 0), Number(debugParams.get('summon') || 9), Number(debugParams.get('summonSide') || 0));
+    if (debugParams.has('lethal')) {
+      const index = THREE.MathUtils.clamp(Number(debugParams.get('summonIndex') || 0), 0, enemies.length - 1);
+      invulnerable = false;
+      enemies[index].grace = elapsed;
+      enemies[index].state = 'hunt';
+    }
   }
 }
