@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#08120e" />
+    <meta name="description" content="BITFOOTS: NO TRACE — a dense low-poly first-person forest horror game." />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%2308120e'/%3E%3Crect x='8' y='4' width='8' height='18' fill='%23f3bb2c'/%3E%3Crect x='16' y='12' width='6' height='16' fill='%23f3bb2c'/%3E%3C/svg%3E" />
+    <title>BITFOOTS: NO TRACE</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main id="game-shell">
+      <div id="viewport" aria-label="BITFOOTS: NO TRACE game viewport"></div>
+
+      <div id="camera-fx" aria-hidden="true">
+        <div class="vignette"></div>
+        <div class="scanlines"></div>
+        <div class="grain"></div>
+        <div id="fear-fx"></div>
+        <div id="damage-fx"></div>
+        <div id="lightning"></div>
+      </div>
+
+      <section id="title-screen" class="screen active">
+        <div class="title-content">
+          <div class="signal-mark" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
+          <p class="eyebrow">FIELD CAMERA 303 // REBUILD 02</p>
+          <h1>BITFOOTS</h1>
+          <h2>NO TRACE</h2>
+          <p class="tagline">
+            Seven shielded traces. One extraction gate.<br />
+            The forest learns how you run.
+          </p>
+          <div class="button-row title-buttons">
+            <button id="start-button" class="primary">ENTER THE FOREST</button>
+            <button id="fullscreen-button" class="secondary">FULLSCREEN</button>
+          </div>
+          <div class="control-grid" aria-label="Controls">
+            <span><kbd>WASD</kbd><small>MOVE</small></span>
+            <span><kbd>MOUSE</kbd><small>LOOK</small></span>
+            <span><kbd>SHIFT</kbd><small>SPRINT</small></span>
+            <span><kbd>SPACE</kbd><small>JUMP</small></span>
+            <span><kbd>F</kbd><small>FLASHLIGHT</small></span>
+            <span><kbd>E</kbd><small>INTERACT</small></span>
+            <span><kbd>C</kbd><small>CROUCH</small></span>
+            <span><kbd>Q</kbd><small>DECOY</small></span>
+            <span><kbd>R</kbd><small>CAMERA</small></span>
+          </div>
+          <p class="meta">DESKTOP · HEADPHONES · 8–12 MINUTES</p>
+          <a class="creator-credit title-credit" href="https://x.com/besiktaspokemon" target="_blank" rel="noreferrer">
+            COMMUNITY GAME BY @BESIKTASPOKEMON ↗
+          </a>
+        </div>
+      </section>
+
+      <section id="briefing-screen" class="screen">
+        <div class="terminal">
+          <p class="eyebrow">LAST EXPEDITION TRANSMISSION // 02:13:07</p>
+          <div id="briefing-copy" class="terminal-copy"></div>
+          <button id="begin-button" class="primary hidden">START FIELD CAMERA</button>
+        </div>
+      </section>
+
+      <section id="hud" class="hidden" aria-live="polite">
+        <div class="hud-record">
+          <span class="label">FIELD CAMERA 303</span>
+          <div><strong>REC <b>●</b></strong><span id="timer">00:00</span></div>
+        </div>
+
+        <div class="objective-panel">
+          <span class="label">RECEIVER TARGET</span>
+          <strong id="objective">ABANDONED SURVEY VAN</strong>
+          <small id="mission-step">R: PHOTOGRAPH 3 MARKED TRACKS — 0/3</small>
+          <div class="compass-row">
+            <i id="compass-arrow">▲</i>
+            <span id="objective-distance">146 M</span>
+          </div>
+        </div>
+
+        <div class="trace-panel">
+          <span class="label">SHIELDED TRACES</span>
+          <strong><b id="trace-count">0</b> / 7</strong>
+        </div>
+
+        <div class="meters">
+          <div class="meter-row">
+            <span>STAMINA</span>
+            <i><b id="stamina-fill"></b></i>
+          </div>
+          <div class="meter-row">
+            <span>BATTERY</span>
+            <i><b id="battery-fill"></b></i>
+          </div>
+          <div class="meter-row noise-row">
+            <span>NOISE</span>
+            <i><b id="noise-fill"></b></i>
+          </div>
+        </div>
+
+        <div id="flashlight-state" class="flashlight-state on">
+          <span class="label">FLASHLIGHT</span>
+          <strong id="flashlight-label">ON</strong>
+          <small>[F] TOGGLE</small>
+        </div>
+
+        <div class="gear-state">
+          <span class="label">ECHO DECOYS</span>
+          <strong><b id="decoy-count">3</b> / 3</strong>
+          <small>[Q] THROW</small>
+        </div>
+      </section>
+
+      <div id="control-strip" class="hidden">
+        <span><kbd>WASD</kbd> MOVE</span>
+        <span><kbd>SHIFT</kbd> RUN</span>
+        <span><kbd>C</kbd> CROUCH</span>
+        <span><kbd>SPACE</kbd> JUMP</span>
+        <span><kbd>F</kbd> LIGHT</span>
+        <span><kbd>Q</kbd> DECOY</span>
+        <span><kbd>R</kbd> CAMERA</span>
+        <span><kbd>TAB</kbd> CONTROLS</span>
+      </div>
+
+      <div id="reticle" class="hidden" aria-hidden="true"></div>
+
+      <div id="interaction" class="hidden">
+        <strong id="interaction-label">HOLD E — RECOVER TRACE</strong>
+        <i><b id="interaction-fill"></b></i>
+      </div>
+
+      <div id="subtitle" aria-live="assertive"></div>
+
+      <div id="chapter-card" aria-live="polite">
+        <span id="chapter-number">TRACE 01</span>
+        <strong id="chapter-name">THE SURVEY VAN</strong>
+      </div>
+
+      <div id="toggle-toast" aria-live="polite">FLASHLIGHT ON</div>
+
+      <div id="tuning-panel" class="hidden">
+        <span class="label">FIELD RECEIVER // MANUAL TUNING</span>
+        <strong>USE A / D — HOLD INSIDE THE SIGNAL BAND</strong>
+        <div class="tuning-track">
+          <i id="tuning-lock"></i>
+          <b id="tuning-needle"></b>
+        </div>
+        <small id="tuning-status">SIGNAL 12%</small>
+      </div>
+
+      <section id="controls-screen" class="screen">
+        <div class="terminal controls-terminal">
+          <p class="eyebrow">FIELD CAMERA // CONTROLS & SETTINGS</p>
+          <h2>STAY ALIVE</h2>
+          <div class="settings-layout">
+            <div class="settings-controls">
+              <span><kbd>WASD</kbd><b>Move</b></span>
+              <span><kbd>MOUSE</kbd><b>Look</b></span>
+              <span><kbd>SHIFT</kbd><b>Sprint — loud</b></span>
+              <span><kbd>C</kbd><b>Crouch — quiet</b></span>
+              <span><kbd>SPACE</kbd><b>Jump</b></span>
+              <span><kbd>F</kbd><b>Flashlight</b></span>
+              <span><kbd>Q</kbd><b>Throw echo decoy</b></span>
+              <span><kbd>R</kbd><b>Field camera</b></span>
+              <span><kbd>E</kbd><b>Interact</b></span>
+              <span><kbd>M</kbd><b>Mute music</b></span>
+            </div>
+            <div class="settings-options">
+              <label>MOUSE SENSITIVITY <input id="mouse-sensitivity" type="range" min="50" max="180" value="100" /></label>
+              <label>MUSIC VOLUME <input id="music-volume" type="range" min="0" max="100" value="75" /></label>
+              <label>SFX VOLUME <input id="sfx-volume" type="range" min="0" max="100" value="80" /></label>
+              <label>RENDER QUALITY
+                <select id="quality-select">
+                  <option value="auto">AUTO</option>
+                  <option value="high">HIGH</option>
+                  <option value="performance">PERFORMANCE</option>
+                </select>
+              </label>
+              <button id="fullscreen-toggle" class="secondary">TOGGLE FULLSCREEN</button>
+            </div>
+          </div>
+          <button id="controls-resume-button" class="primary">RETURN TO THE FOREST</button>
+        </div>
+      </section>
+
+      <section id="pause-screen" class="screen">
+        <div class="terminal compact centered">
+          <p class="eyebrow">FIELD CAMERA PAUSED</p>
+          <h2>THEY DO NOT PAUSE</h2>
+          <button id="resume-button" class="primary">RETURN TO THE FOREST</button>
+          <button id="pause-restart-button" class="secondary">RESTART EXPEDITION</button>
+        </div>
+      </section>
+
+      <section id="death-screen" class="screen">
+        <div class="terminal compact centered">
+          <p class="eyebrow">FIELD CAMERA 303 // SIGNAL LOST</p>
+          <h2>YOU LEFT A TRACE</h2>
+          <p>The camera was found facing the trees. You were not.</p>
+          <div class="death-stats">
+            <span><small>RECOVERED</small><b id="death-traces">0 / 7</b></span>
+            <span><small>TIME</small><b id="death-time">00:00</b></span>
+          </div>
+          <button id="death-restart-button" class="primary">RESTART EXPEDITION</button>
+        </div>
+      </section>
+
+      <section id="ending-screen" class="screen">
+        <div class="terminal ending centered">
+          <p class="eyebrow">FIELD CAMERA 303 // TRANSMISSION COMPLETE</p>
+          <h2>STATUS: OBSERVED</h2>
+          <p>You recovered every trace.<br />The forest recovered yours.</p>
+          <div class="ending-stats">
+            <span><small>TIME</small><b id="final-time">00:00</b></span>
+            <span><small>TRACES</small><b>7 / 7</b></span>
+          </div>
+          <div class="button-row">
+            <button id="ending-restart-button" class="primary">ENTER AGAIN</button>
+            <button id="copy-button" class="secondary">COPY FIELD REPORT</button>
+          </div>
+          <p id="copy-status" class="copy-status"></p>
+        </div>
+      </section>
+
+      <section id="mobile-warning" class="screen">
+        <div class="terminal compact centered">
+          <p class="eyebrow">DESKTOP CAMERA REQUIRED</p>
+          <h2>THE FOREST NEEDS A MOUSE</h2>
+          <p>This build uses first-person mouse look, sprint and jump controls. Open it on a desktop or laptop.</p>
+        </div>
+      </section>
+
+      <footer>
+        COMMUNITY GAME BY
+        <a href="https://x.com/besiktaspokemon" target="_blank" rel="noreferrer">@BESIKTASPOKEMON</a>
+      </footer>
+    </main>
+
+    <script type="module" src="game.js"></script>
+  </body>
+</html>
